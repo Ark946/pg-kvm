@@ -76,7 +76,8 @@ pg-kvm-android/
 | `app/.../compose/MainActivity.kt` | 唯一 Activity；Compose 主界面、预览 SurfaceView、BLE/分辨率/端口对话框 |
 | `stream/sessions/WebRtcSessionManager.kt` | 对 UI 暴露的接口（全部状态是 `StateFlow`） |
 | `stream/sessions/WebRtcSessionManagerImpl.kt` | **总协调器**：全局 helper、摄像头会话表、三个服务器的启停、端口持久化、BLE 重连 |
-| `stream/sessions/CameraSession.kt` | 每摄像头会话：capturer + 配对 BLE 连接；dormant/active 生命周期 |
+| `stream/sessions/CameraSession.kt` | 每摄像头会话：capturer + 配对 BLE 连接 + 当前采集规格；dormant/active 生命周期 |
+| `stream/sessions/CaptureSpec.kt` | 采集规格（宽/高/帧率）与“首选规格是否受支持”的匹配逻辑 |
 | `java/com/arkj/video/UvcCameraHelper.java` | 全局 USBMonitor：枚举 UVC、插拔监听、USB 权限中介（异步回 `openControlBlock`） |
 | `java/com/arkj/video/capture/UvcCameraVideoCapture.java` | 自定义 `org.webrtc.VideoCapturer`；MJPEG/YUYV → I420 零拷贝喂 WebRTC |
 | `stream/SignalingServer.kt` | WebSocket 信令（默认 3000）；每个浏览器一个 PeerConnection，Android 为 answerer |
@@ -163,8 +164,10 @@ pg-kvm-android/
 7. **BLE 权限分代**：Android 12+ 用 `BLUETOOTH_SCAN/CONNECT`；旧版用 `BLUETOOTH(_ADMIN)` +
    `ACCESS_FINE_LOCATION`（`PermissionUtils.BLE_PERMISSIONS` 已按 SDK 分支）。
 8. **没有前台 Service**：服务器随 Activity 存活；应用被杀/部分后台清理会导致服务停止。
-9. **分辨率切换会重启预览**：`changeResolution()` = `pauseCapture()` + 新尺寸
-   `startCapture()`；而 `resumeCapture()` 固定使用 1280x720@30，暂停预览后再恢复会丢失用户选择的分辨率。
+9. **分辨率切换会重启预览**：`changeResolution()` = `pauseCapture()` + 新尺寸 `startCapture()`。
+   `CameraSession.captureSpec` 保存当前规格，暂停/恢复预览、停止/重新开始串流都会沿用；
+   切换/重新激活摄像头时先重置为默认 1280x720@30，等支持列表就绪后再应用全局首选规格
+   （不支持则保持默认，且不会覆盖首选）。
 10. **`StreamInfo.isStreaming` 表示「服务器已启动」而非「有浏览器在看」**；客户端列表看
     `clientAddresses`。
 11. **`/api/camera/info` 是遗留接口**：`cameraInfoProvider` 从未注入，返回默认 `CameraInfo` 的

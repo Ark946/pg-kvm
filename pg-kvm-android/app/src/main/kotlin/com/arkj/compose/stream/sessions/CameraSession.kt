@@ -39,6 +39,13 @@ class CameraSession(
     var bleConnection: BleConnection? = null
         private set
 
+    /**
+     * 当前会话生效的采集规格（默认 1280x720@30）。
+     * 暂停/恢复预览、停止/重新开始串流时沿用该值。
+     */
+    var captureSpec: CaptureSpec = CaptureSpec.DEFAULT
+        private set
+
     /** 最近一次设置的预览 Surface（切换/重启采集时复用） */
     var pendingPreviewSurface: Surface? = null
 
@@ -54,6 +61,7 @@ class CameraSession(
      * 创建 capturer 并以给定的 ctrlBlock 启动采集。
      * 在 SessionManager 拿到 USB 权限（onGranted）后调用。
      */
+    @Synchronized
     fun startCapturer(
         context: Context,
         ctrlBlock: USBMonitor.UsbControlBlock,
@@ -68,11 +76,13 @@ class CameraSession(
         pendingPreviewSurface?.let { capturer.setPreviewSurface(it) }
         this.capturer = capturer
 
-        capturer.startCapture(DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS)
-        onCaptureStarted?.invoke(DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS)
+        val spec = captureSpec
+        capturer.startCapture(spec.width, spec.height, spec.fps)
+        onCaptureStarted?.invoke(spec.width, spec.height, spec.fps)
     }
 
     /** 停止采集循环，保留 UVCCamera 对象（可 resume 恢复） */
+    @Synchronized
     fun pauseCapture() {
         try {
             capturer?.stopCapture()
@@ -82,9 +92,18 @@ class CameraSession(
         }
     }
 
-    /** 恢复采集循环（pauseCapture 之后） */
-    fun resumeCapture() {
-        capturer?.startCapture(DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_FPS)
+    /**
+     * 恢复采集循环（pauseCapture 之后），沿用 [captureSpec]。
+     *
+     * @return 是否真正恢复了采集；没有 capturer 时返回 false。
+     */
+    @Synchronized
+    fun resumeCapture(): Boolean {
+        val capturer = this.capturer ?: return false
+        val spec = captureSpec
+        capturer.startCapture(spec.width, spec.height, spec.fps)
+        onCaptureStarted?.invoke(spec.width, spec.height, spec.fps)
+        return true
     }
 
     // ==================== 分辨率 ====================
@@ -93,6 +112,7 @@ class CameraSession(
      * 当前摄像头支持的分辨率列表（需摄像头已打开，否则返回空列表）。
      * 去重并按像素数降序排列。
      */
+    @Synchronized
     fun supportedResolutions(): List<ResolutionInfo> {
         val capturer = this.capturer ?: return emptyList()
         return capturer.supportedResolutions
@@ -107,15 +127,26 @@ class CameraSession(
 
     /**
      * 切换采集分辨率：停止预览循环后以新尺寸重启（UVCCamera 保持打开，不重新申请权限）。
+     *
+     * @return 是否真正执行了切换；没有 capturer 时返回 false。
      */
-    fun changeResolution(width: Int, height: Int, fps: Int) {
-        val capturer = this.capturer ?: return
+    @Synchronized
+    fun changeResolution(width: Int, height: Int, fps: Int): Boolean {
+        val capturer = this.capturer ?: return false
+        captureSpec = CaptureSpec(width, height, fps)
         pauseCapture()
         capturer.startCapture(width, height, fps)
         onCaptureStarted?.invoke(width, height, fps)
+        return true
+    }
+
+    /** 恢复默认规格；下一次激活摄像头时使用。 */
+    fun resetCaptureSpec() {
+        captureSpec = CaptureSpec.DEFAULT
     }
 
     /** 释放采集器（完全释放原生资源），会话进入 dormant 状态 */
+    @Synchronized
     fun releaseCapturer() {
         val capturer = this.capturer ?: return
         try {

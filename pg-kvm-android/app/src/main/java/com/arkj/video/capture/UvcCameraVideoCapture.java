@@ -40,7 +40,8 @@ public class UvcCameraVideoCapture implements VideoCapturer {
   private USBMonitor.UsbControlBlock ctrlBlock;
   private Surface previewSurface;
 
-  private UVCCamera uvcCamera;
+  // 由采集线程写入，UI/管理器线程会读取支持列表，使用 volatile 保证可见性
+  private volatile UVCCamera uvcCamera;
   private HandlerThread cameraThread;
   private Handler cameraHandler;
 
