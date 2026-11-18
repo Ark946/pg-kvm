@@ -65,3 +65,6 @@ dist/
 **/src/main/assets/web/
 
 .claude/
+
+# Local scratch files (not tracked)
+ignored/
