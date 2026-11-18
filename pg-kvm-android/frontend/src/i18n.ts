@@ -11,6 +11,7 @@ const messages = {
   zh: {
     // 连接状态
     status_not_connected: "未连接",
+    status_ports_unavailable: "无法获取设备端口信息，请确认服务已启动后重试",
     status_connecting_signaling: "正在连接信令服务器...",
     status_signaling_connected: "信令已连接，创建 WebRTC 连接...",
     status_signaling_failed: "信令连接失败！请确认服务端已启动",
@@ -68,6 +69,7 @@ const messages = {
   en: {
     // Connection status
     status_not_connected: "Not connected",
+    status_ports_unavailable: "Unable to get device ports. Make sure the service is running and try again",
     status_connecting_signaling: "Connecting to signaling server...",
     status_signaling_connected: "Signaling connected, creating WebRTC...",
     status_signaling_failed: "Signaling failed! Make sure the server is running",

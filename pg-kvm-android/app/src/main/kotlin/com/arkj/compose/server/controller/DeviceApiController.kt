@@ -71,10 +71,18 @@ class DeviceApiController {
       put("inputClientCount", sm.inputClientCount.value)
     }
 
+    val ports = sm.getServerPorts()
+    val portsJson = JSONObject().apply {
+      put("http", ports.httpPort)
+      put("signaling", ports.signalingPort)
+      put("relay", ports.relayPort)
+    }
+
     return JSONObject().apply {
       put("cameras", cameras)
       val currentName = sm.currentCamera.value?.displayName
       put("currentCameraName", currentName ?: JSONObject.NULL)
+      put("ports", portsJson)
       put("stream", streamJson)
       put("ble", ble)
     }.toString()

@@ -107,8 +107,9 @@ pg-kvm-android/
   opcode 都不能单方面改；改一端必须同步改另一端。
 - **帧回调必须恰好归还一次**：`UvcCameraVideoCapture` 的 I420 包装使用 native 帧池内存，
   所有退出路径都要通过 release callback 调用 `UVCCamera.nativeReleaseFrame(framePtr)`。
-- **前端 WS 端口是写死的 3000 / 3001**（`App.vue`），而应用内端口可配置。修改默认端口时，
-  必须同步改前端，否则网页端连不上。
+- **前端 WS 端口来自设备状态**：界面点击「开始拉流」时会重新请求 `/api/status`，用其中的
+  `ports.signaling` / `ports.relay` 与当前页面主机名拼接 WS 地址；端口缺失或状态不可用时
+  拒绝连接并提示，不回退默认端口。修改端口后需要重新加载网页。
 - **输入写队列语义**：按键类事件保序不丢；鼠标移动/滚轮可丢；队列上限 128；
   单包最多重试 5 次（间隔 4ms）。
 - **仅第一个输入客户端有效**：`InputRelayServer` 只处理 `activeInputClient` 的消息，
@@ -141,7 +142,7 @@ pg-kvm-android/
 | 新增键鼠消息类型 | `frontend/src/App.vue` → `InputRelayServer.handleInputMessage` → `BleConnection`/`HID` → ESP32 固件 |
 | 新增 BLE 指令 | `BleConnection` 的 opcode 常量与 send 方法；同步固件 |
 | 改默认分辨率/帧率 | `CameraSession.DEFAULT_WIDTH/HEIGHT/FPS`（注意 `resumeCapture()` 也用它） |
-| 改服务器端口 | `WebRtcSessionManagerImpl` 的 `DEFAULT_*_PORT` + `frontend/src/App.vue` 的 WS URL |
+| 改服务器端口 | `WebRtcSessionManagerImpl` 的 `DEFAULT_*_PORT`；网页端无需改代码（从 `/api/status` 的 `ports` 读取） |
 | 改摄像头枚举规则 | `UvcCameraHelper.isUvcDevice`（`CameraUtils.isUsbCamera` / `isFilterDevice`） |
 | 加设备过滤白名单 | `libuvc/src/main/java/com/jiangdg/usb/DeviceFilter.java` / `CameraUtils` |
 

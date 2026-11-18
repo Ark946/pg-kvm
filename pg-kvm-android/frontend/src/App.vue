@@ -7,6 +7,8 @@
  */
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { t, toggleLocale } from "./i18n";
+import { resolveConnectionUrls } from "./ports";
+import { isDeviceStatus, type DeviceStatus } from "./device-status";
 
 // ============ 状态 ============
 const statusText = ref(t("status_not_connected"));
@@ -27,20 +29,26 @@ let inputWs: WebSocket | null = null;
 let modifierState = { ctrl: false, shift: false, alt: false, meta: false };
 let pointerLocked = ref(false);
 
-// ============ 配置 ============
-const WS_URL = `ws://${window.location.hostname}:3000`;
-
 const isConnected = computed(() => connectionState.value === "connected");
 
 // ============ 开始连接 ============
 async function startConnection() {
   statusText.value = t("status_connecting_signaling");
 
+  // ---------- 0. 拉取设备当前端口 ----------
+  // 端口可能在上次轮询后改变，开始拉流前必须重新读取；失败时不回退默认端口。
+  const status = await fetchStatus();
+  const urls = resolveConnectionUrls(status, window.location.hostname);
+  if (!urls) {
+    statusText.value = t("status_ports_unavailable");
+    return;
+  }
+
   // ---------- 1. 连接 WebSocket 信令服务器 ----------
-  ws = new WebSocket(WS_URL);
+  ws = new WebSocket(urls.signalingUrl);
 
   // 拉流开始后自动开启键鼠捕获
-  startInputCapture();
+  startInputCapture(urls.inputUrl);
 
   ws.onopen = async () => {
     statusText.value = t("status_signaling_connected");
@@ -280,9 +288,8 @@ function stopConnection() {
 
 // ============ 键鼠输入捕获 ============
 
-function startInputCapture() {
-  const INPUT_WS_URL = `ws://${window.location.hostname}:3001`;
-  inputWs = new WebSocket(INPUT_WS_URL);
+function startInputCapture(inputUrl: string) {
+  inputWs = new WebSocket(inputUrl);
 
   inputWs.onopen = () => {
     isCapturingInput.value = true;
@@ -469,34 +476,6 @@ function onFullscreenChange() {
 
 // ============ 设备状态侧边卡片 ============
 
-interface CameraItem {
-  id: string;
-  name: string;
-  current: boolean;
-}
-
-interface DeviceStatus {
-  cameras: CameraItem[];
-  currentCameraName: string | null;
-  stream: {
-    resolution: string;
-    resolutionWidth: number;
-    resolutionHeight: number;
-    frameRate: number;
-    codec: string;
-    isStreaming: boolean;
-    serverUrl: string;
-    clientAddresses: string[];
-  };
-  ble: {
-    status: string;
-    isReady: boolean;
-    isScanning: boolean;
-    connectedDeviceName: string | null;
-    inputClientCount: number;
-  };
-}
-
 interface BleDeviceItem {
   name: string;
   address: string;
@@ -506,13 +485,17 @@ interface BleDeviceItem {
 const deviceStatus = ref<DeviceStatus | null>(null);
 let statusTimer: ReturnType<typeof setInterval> | null = null;
 
-async function fetchStatus() {
+async function fetchStatus(): Promise<DeviceStatus | null> {
   try {
     const resp = await fetch("/api/status");
-    const data = await resp.json();
+    if (!resp.ok) return null;
+    const data: unknown = await resp.json();
+    if (!isDeviceStatus(data)) return null;
     deviceStatus.value = data;
+    return data;
   } catch {
-    // 服务端未就绪时静默忽略，下轮重试
+    // 服务端未就绪时静默忽略，下轮重试；开始拉流时会显式提示
+    return null;
   }
 }
 
