@@ -88,7 +88,6 @@ pg-kvm-android/
 | `stream/input/HID.kt` | USB HID keycode / 修饰键 / 字符映射表 |
 | `server/WebStreamPageServer.kt` | AndServer HTTP 服务（默认 8080），托管 `assets/web` |
 | `server/controller/DeviceApiController.kt` | 前端侧边卡片调用的 REST API |
-| `server/controller/CameraInfoController.kt` | 遗留接口，provider 未注入，实际返回 `toString()`，不要作为范例 |
 | `frontend/src/App.vue` | 网页端全部逻辑：WS/WebRTC、全屏键鼠捕获、状态轮询、侧边卡片 |
 | `frontend/src/i18n.ts` | 自研极简中英文案 |
 
@@ -167,8 +166,8 @@ pg-kvm-android/
    `startCapture()`；而 `resumeCapture()` 固定使用 1280x720@30，暂停预览后再恢复会丢失用户选择的分辨率。
 10. **`StreamInfo.isStreaming` 表示「服务器已启动」而非「有浏览器在看」**；客户端列表看
     `clientAddresses`。
-11. **`/api/camera/info` 是遗留接口**：`cameraInfoProvider` 从未注入，返回默认 `CameraInfo` 的
-    `toString()`，不是合法 JSON。
+11. **`/api/camera/info` 已移除**：该遗留端点不再暴露；设备信息统一从 `/api/status` 获取，
+    不要再新增兼容端点或重定向。
 12. **BLE 未就绪时输入会被静默丢弃**（`InputRelayServer` 只打日志），网页端不会收到错误。
 13. **鼠标位移单包 clamp 到 ±127**，高 DPI/快速移动可能被截断。
 
