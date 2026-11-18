@@ -111,6 +111,9 @@ dependencies {
 
   // WebSocket server for WebRTC signaling
   implementation("org.java-websocket:Java-WebSocket:1.5.7")
+
+  // 单元测试
+  testImplementation("junit:junit:4.13.2")
 }
 
 // ==================== 前端打包与同步 ====================

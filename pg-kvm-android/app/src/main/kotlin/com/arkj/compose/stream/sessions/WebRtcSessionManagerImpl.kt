@@ -89,6 +89,10 @@ class WebRtcSessionManagerImpl(
     private const val DEFAULT_HTTP_PORT = 8080
     private const val DEFAULT_SIGNALING_PORT = 3000
     private const val DEFAULT_RELAY_PORT = 3001
+
+    /** 激活摄像头后等待支持列表就绪的最大重试次数与间隔（摄像头打开是异步的） */
+    private const val PREFERRED_SPEC_MAX_ATTEMPTS = 50
+    private const val PREFERRED_SPEC_RETRY_DELAY_MS = 100L
   }
 
   // ===== 全局唯一对象 =====
@@ -139,6 +143,9 @@ class WebRtcSessionManagerImpl(
 
   private val _streamInfo = MutableStateFlow(StreamInfo())
   override val streamInfo: StateFlow<StreamInfo> = _streamInfo
+
+  /** 跨摄像头沿用的首选规格；null 表示用户尚未显式选择 */
+  private var preferredCaptureSpec: CaptureSpec? = null
 
   private val _isCapturing = MutableStateFlow(false)
   override val isCapturing: StateFlow<Boolean> = _isCapturing
@@ -252,7 +259,9 @@ class WebRtcSessionManagerImpl(
       return
     }
     logger.i { "[switchResolution] ${session.cameraId}: ${width}x${height} @ $fps" }
-    session.changeResolution(width, height, fps)
+    if (session.changeResolution(width, height, fps)) {
+      preferredCaptureSpec = CaptureSpec(width, height, fps)
+    }
   }
 
   override fun release() {
@@ -293,8 +302,7 @@ class WebRtcSessionManagerImpl(
     logger.i { "[enablePreview] isConnected=${_isConnected.value}, isCapturing=${_isCapturing.value}" }
     lastPreviewSurface = surface
     activeSession()?.let { session ->
-      if (!_isCapturing.value) {
-        session.resumeCapture()
+      if (!_isCapturing.value && session.resumeCapture()) {
         _isCapturing.value = true
       }
       session.setPreviewSurface(surface)
@@ -317,8 +325,7 @@ class WebRtcSessionManagerImpl(
 
   override fun enableStreaming() {
     activeSession()?.let { session ->
-      if (!_isCapturing.value) {
-        session.resumeCapture()
+      if (!_isCapturing.value && session.resumeCapture()) {
         _isCapturing.value = true
       }
     }
@@ -521,6 +528,8 @@ class WebRtcSessionManagerImpl(
       CameraSession(cameraId, camera?.displayName ?: cameraId)
     }
     session.onCaptureStarted = ::onCaptureStarted
+    // 新激活从默认规格开始；采集启动后再按全局首选规格校验
+    session.resetCaptureSpec()
     // 复用 UI 已创建的预览 Surface（切换摄像头时 UI 不会重新回调 surfaceCreated）
     session.pendingPreviewSurface = lastPreviewSurface
 
@@ -550,6 +559,7 @@ class WebRtcSessionManagerImpl(
           return
         }
         current.startCapturer(context.applicationContext, ctrlBlock, sth, source)
+        applyPreferredSpecWhenReady(current)
       }
 
       override fun onDenied(id: String) {
@@ -570,6 +580,41 @@ class WebRtcSessionManagerImpl(
     _isCapturing.value = false
     _isConnected.value = false
     stopBleStateMirror()
+  }
+
+  /**
+   * 摄像头打开是异步的：轮询支持列表，就绪后若全局首选规格受支持则应用，
+   * 否则保持默认规格。首选规格只由用户显式切换分辨率时更新。
+   */
+  private fun applyPreferredSpecWhenReady(session: CameraSession, attempt: Int = 0) {
+    val preferred = preferredCaptureSpec ?: return
+    if (preferred == CaptureSpec.DEFAULT) return
+    if (session.cameraId != activeCameraId) return
+
+    val supported = session.supportedResolutions()
+    if (supported.isNotEmpty()) {
+      val match = findSupportedSpec(preferred, supported) ?: run {
+        logger.i { "[applyPreferredSpec] ${session.cameraId} does not support $preferred, keep default" }
+        return
+      }
+      if (session.cameraId != activeCameraId) return
+      val target = CaptureSpec(match.width, match.height, preferred.fps)
+      if (session.captureSpec == target) return
+      logger.i {
+        "[applyPreferredSpec] ${session.cameraId}: applying ${target.width}x${target.height}@${target.fps}"
+      }
+      session.changeResolution(target.width, target.height, target.fps)
+      return
+    }
+
+    if (attempt >= PREFERRED_SPEC_MAX_ATTEMPTS) {
+      logger.w { "[applyPreferredSpec] ${session.cameraId}: supported list not ready, keep default" }
+      return
+    }
+    sessionManagerScope.launch {
+      delay(PREFERRED_SPEC_RETRY_DELAY_MS)
+      applyPreferredSpecWhenReady(session, attempt + 1)
+    }
   }
 
   /** 采集启动回调：更新分辨率/帧率和采集状态 */
