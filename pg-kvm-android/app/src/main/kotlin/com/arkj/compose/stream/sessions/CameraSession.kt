@@ -61,6 +61,7 @@ class CameraSession(
      * 创建 capturer 并以给定的 ctrlBlock 启动采集。
      * 在 SessionManager 拿到 USB 权限（onGranted）后调用。
      */
+    @Synchronized
     fun startCapturer(
         context: Context,
         ctrlBlock: USBMonitor.UsbControlBlock,
@@ -81,6 +82,7 @@ class CameraSession(
     }
 
     /** 停止采集循环，保留 UVCCamera 对象（可 resume 恢复） */
+    @Synchronized
     fun pauseCapture() {
         try {
             capturer?.stopCapture()
@@ -95,6 +97,7 @@ class CameraSession(
      *
      * @return 是否真正恢复了采集；没有 capturer 时返回 false。
      */
+    @Synchronized
     fun resumeCapture(): Boolean {
         val capturer = this.capturer ?: return false
         val spec = captureSpec
@@ -109,6 +112,7 @@ class CameraSession(
      * 当前摄像头支持的分辨率列表（需摄像头已打开，否则返回空列表）。
      * 去重并按像素数降序排列。
      */
+    @Synchronized
     fun supportedResolutions(): List<ResolutionInfo> {
         val capturer = this.capturer ?: return emptyList()
         return capturer.supportedResolutions
@@ -126,6 +130,7 @@ class CameraSession(
      *
      * @return 是否真正执行了切换；没有 capturer 时返回 false。
      */
+    @Synchronized
     fun changeResolution(width: Int, height: Int, fps: Int): Boolean {
         val capturer = this.capturer ?: return false
         captureSpec = CaptureSpec(width, height, fps)
@@ -141,6 +146,7 @@ class CameraSession(
     }
 
     /** 释放采集器（完全释放原生资源），会话进入 dormant 状态 */
+    @Synchronized
     fun releaseCapturer() {
         val capturer = this.capturer ?: return
         try {

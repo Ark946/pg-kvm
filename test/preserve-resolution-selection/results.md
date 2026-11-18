@@ -40,7 +40,10 @@ cd pg-kvm-android
 | BT-05 首选更新时机 | ✅ 通过 | `switchResolution` 仅在 `changeResolution` 返回 true 时更新首选 |
 | BT-06 激活时回退策略 | ✅ 通过 | `activateCamera` 先 `resetCaptureSpec()`；支持列表就绪后应用首选，不支持保持默认 |
 
-补充：`UvcCameraVideoCapture.uvcCamera` 标记为 `volatile`，保证管理器轮询支持列表时能看到采集线程的写入。
+补充：
+
+- `UvcCameraVideoCapture.uvcCamera` 标记为 `volatile`，保证管理器轮询支持列表时能看到采集线程的写入。
+- `CameraSession` 的采集生命周期方法（启动/暂停/恢复/释放/切换分辨率/查询支持列表）使用 `@Synchronized`，避免后台应用首选规格与摄像头切换/释放并发导致 use-after-dispose。
 
 ## 3. 真机端到端
 
